@@ -39,7 +39,8 @@ class Settings(BaseSettings):
     max_tokens: int = 1000
 
     pg_uri: str = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_dbname}?sslmode=require"
-    
+    CHECKPOINT_TTL: int = 60 * 60 * 24 * 30 # 30 days
+
     class Config:
         case_sensitive = False
 

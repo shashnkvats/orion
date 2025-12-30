@@ -26,7 +26,8 @@ async def agent_service(body: dict):
         graph = builder.compile(checkpointer=checkpointer)
         config = {
             "configurable": {
-                "thread_id": body["thread_id"]
+                "thread_id": body["thread_id"],
+                "ttl": settings.CHECKPOINT_TTL
             }
         }
         async for event in graph.astream_events(
