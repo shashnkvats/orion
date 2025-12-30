@@ -9,8 +9,7 @@ class AgentState(MessagesState):
     parent_id: str
     message_id: str
     user_message: str
-    new_thread: bool
-    conversation_history: List[BaseMessage]
+    messages: List[BaseMessage]
 
 
 class CasualConversationState(MessagesState):

@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     temperature: float = 0.7
     max_tokens: int = 1000
 
-    pg_uri: str = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_dbname}?sslmode=disable"
+    pg_uri: str = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_dbname}?sslmode=require"
     
     class Config:
         case_sensitive = False

@@ -17,12 +17,14 @@ llm = ChatOpenAI(
 async def orchestration_node(state: AgentState):
     """orchestration node - makes an LLM call and returns the response with streaming"""
     # Initialize LangChain ChatOpenAI with streaming enabled
-    if state.get("new_thread", True):
+    existing_messages = state.get("messages", [])
+
+    if not existing_messages:
         messages = [
             (SystemMessage(content=orion.prompt))
         ]
     else:
-        messages = state.get("conversation_history", [])
+        messages = existing_messages
 
     user_message = state.get("user_message", "")    
     messages.append(HumanMessage(content=user_message))
@@ -35,5 +37,5 @@ async def orchestration_node(state: AgentState):
     messages.append(AIMessage(content=full_response))
 
     return {
-        "conversation_history": messages
+        "messages": messages
     }
