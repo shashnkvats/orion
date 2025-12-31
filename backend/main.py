@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from controller import router
 
+from db.pool import init_db, close_db
+
 app = FastAPI()
 
 # Configure CORS for frontend
@@ -14,6 +16,15 @@ app.add_middleware(
 )
 
 app.include_router(router)
+
+@app.on_event("startup")
+async def startup():
+    await init_db()
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    await close_db()
 
 
 @app.get("/health")

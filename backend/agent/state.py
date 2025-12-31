@@ -6,8 +6,7 @@ class AgentState(MessagesState):
     """agent state variables"""
     user_id: str
     thread_id: str
-    parent_id: str
-    message_id: str
+    turn_id: str
     user_message: str
     messages: List[BaseMessage]
 
