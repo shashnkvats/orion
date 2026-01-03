@@ -10,9 +10,8 @@ app = FastAPI()
 # Configure CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
-    allow_origin_regex=r"https://.*\.vercel\.app",  # Allow all Vercel subdomains
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all origins (tighten in production)
+    allow_credentials=False,  # Must be False when using allow_origins=["*"]
     allow_methods=["*"],
     allow_headers=["*"],
 )
