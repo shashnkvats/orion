@@ -26,12 +26,15 @@ async def agent_service(body: dict):
     """Agent service with token-level streaming"""
 
     thread_id = body["thread_id"]
-    user_id = body["user_id"]
+    user_id = body.get("user_id")  # Can be None for anonymous users
     turn_id = uuid.uuid4()
     user_message = body["user_message"]
+    should_persist = body.get("persist", True)  # Default to True for backwards compatibility
 
-    # Fire-and-forget: create thread + turn in single transaction (avoids FK race condition)
-    fire(persist_thread_and_turn(thread_id, user_id, turn_id, user_message))
+    # Only persist to database for authenticated users
+    if should_persist and user_id:
+        # Fire-and-forget: create thread + turn in single transaction (avoids FK race condition)
+        fire(persist_thread_and_turn(thread_id, user_id, turn_id, user_message))
 
     async with AsyncPostgresSaver.from_conn_string(settings.pg_uri) as checkpointer:  
         # await checkpointer.setup()
@@ -48,7 +51,7 @@ async def agent_service(body: dict):
         
         async for event in graph.astream_events(
             {
-                "user_id": user_id,
+                "user_id": user_id or "anonymous",
                 "thread_id": thread_id,
                 "turn_id": turn_id,
                 "user_message": user_message,
@@ -73,10 +76,12 @@ async def agent_service(body: dict):
                     "content": ""
                 }
 
-                # Fire-and-forget: batch persist messages and mark turn complete
-                fire(persist_turn_complete(
-                    thread_id=thread_id,
-                    turn_id=turn_id,
-                    user_message=user_message,
-                    assistant_message=full_response
-                ))
+                # Only persist messages for authenticated users
+                if should_persist and user_id:
+                    # Fire-and-forget: batch persist messages and mark turn complete
+                    fire(persist_turn_complete(
+                        thread_id=thread_id,
+                        turn_id=turn_id,
+                        user_message=user_message,
+                        assistant_message=full_response
+                    ))

@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
 from fastapi.responses import StreamingResponse
+from typing import Optional
 
 from schema import ChatRequest
 from agent.builder import agent_service
-from auth.dependencies import get_current_user
+from auth.dependencies import get_current_user, get_optional_user
 from db.pool import db
 
 import uuid
@@ -12,6 +13,59 @@ import json
 router = APIRouter()
 
 SCHEMA = "orion"
+ANONYMOUS_DAILY_LIMIT = 5
+
+
+async def check_anonymous_rate_limit(ip_address: str) -> dict:
+    """
+    Check and increment anonymous user rate limit.
+    Returns dict with 'allowed', 'remaining', and 'limit' keys.
+    """
+    async with db.pool.acquire() as conn:
+        # Try to get existing record for today
+        row = await conn.fetchrow(f"""
+            SELECT request_count FROM {SCHEMA}.anonymous_usage
+            WHERE ip_address = $1 AND usage_date = CURRENT_DATE
+        """, ip_address)
+        
+        if row is None:
+            # First request today - create record
+            await conn.execute(f"""
+                INSERT INTO {SCHEMA}.anonymous_usage (ip_address, usage_date, request_count)
+                VALUES ($1, CURRENT_DATE, 1)
+            """, ip_address)
+            return {"allowed": True, "remaining": ANONYMOUS_DAILY_LIMIT - 1, "limit": ANONYMOUS_DAILY_LIMIT}
+        
+        current_count = row["request_count"]
+        
+        if current_count >= ANONYMOUS_DAILY_LIMIT:
+            # Limit exceeded
+            return {"allowed": False, "remaining": 0, "limit": ANONYMOUS_DAILY_LIMIT}
+        
+        # Increment counter
+        await conn.execute(f"""
+            UPDATE {SCHEMA}.anonymous_usage
+            SET request_count = request_count + 1, updated_at = NOW()
+            WHERE ip_address = $1 AND usage_date = CURRENT_DATE
+        """, ip_address)
+        
+        return {"allowed": True, "remaining": ANONYMOUS_DAILY_LIMIT - current_count - 1, "limit": ANONYMOUS_DAILY_LIMIT}
+
+
+def get_client_ip(request: Request) -> str:
+    """Extract client IP from request, handling proxies."""
+    # Check for forwarded headers (when behind proxy/load balancer)
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        # X-Forwarded-For can contain multiple IPs, take the first one
+        return forwarded.split(",")[0].strip()
+    
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip
+    
+    # Fallback to direct client IP
+    return request.client.host if request.client else "unknown"
 
 
 @router.get("/conversations")
@@ -142,24 +196,49 @@ async def get_thread_messages(
 
 
 @router.post("/chat/stream")
-async def chat_stream(request: ChatRequest, current_user: dict = Depends(get_current_user)):
+async def chat_stream(
+    request: Request,
+    chat_request: ChatRequest,
+    current_user: Optional[dict] = Depends(get_optional_user)
+):
     """
-    Streaming chat endpoint - sends chunks as Server-Sent Events (SSE)
+    Streaming chat endpoint - sends chunks as Server-Sent Events (SSE).
+    Works for both authenticated and anonymous users.
+    Anonymous users are limited to 5 questions per day.
     """
+    is_anonymous = current_user is None
+    rate_limit_info = None
+    
+    # Check rate limit for anonymous users
+    if is_anonymous:
+        client_ip = get_client_ip(request)
+        rate_limit_info = await check_anonymous_rate_limit(client_ip)
+        
+        if not rate_limit_info["allowed"]:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "message": "Daily limit reached. Sign in for unlimited access.",
+                    "remaining": 0,
+                    "limit": ANONYMOUS_DAILY_LIMIT
+                }
+            )
+    
     async def generate():
         try:
-            user_id = current_user["user_id"]
-            parent_id = uuid.uuid4()
-
+            user_id = current_user["user_id"] if current_user else None
             
             async for chunk in agent_service({
                 "user_id": user_id,
-                "thread_id": request.threadId or uuid.uuid4(),
-                "parent_id": uuid.uuid4(),
-                "user_message": request.message
+                "thread_id": chat_request.threadId or str(uuid.uuid4()),
+                "parent_id": str(uuid.uuid4()),
+                "user_message": chat_request.message,
+                "persist": not is_anonymous  # Don't persist for anonymous users
             }):
-                # Chunks are already in serializable format from agent_service
-                # Format as SSE (Server-Sent Events)
+                # Include rate limit info in first chunk for anonymous users
+                if is_anonymous and rate_limit_info and chunk.get("type") == "token":
+                    chunk["remaining_questions"] = rate_limit_info["remaining"]
+                
                 data = json.dumps(chunk)
                 yield f"data: {data}\n\n"
                 
@@ -176,5 +255,3 @@ async def chat_stream(request: ChatRequest, current_user: dict = Depends(get_cur
             "X-Accel-Buffering": "no"  # Disable buffering for nginx
         }
     )
-
-
