@@ -13,7 +13,7 @@ import json
 router = APIRouter()
 
 SCHEMA = "orion"
-ANONYMOUS_DAILY_LIMIT = 5
+ANONYMOUS_DAILY_LIMIT = 40
 
 
 async def check_anonymous_rate_limit(ip_address: str) -> dict:
