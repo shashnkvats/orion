@@ -6,7 +6,8 @@ import ShareModal from './components/ShareModal'
 import FeedbackModal from './components/FeedbackModal'
 import AuthModal from './components/AuthModal'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||'https://orion-699590545294.asia-south1.run.app'
 
 // Get stored auth token
 const getToken = () => localStorage.getItem('token')
