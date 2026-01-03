@@ -9,6 +9,9 @@ import AuthModal from './components/AuthModal'
 // const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||'https://orion-699590545294.asia-south1.run.app'
 
+// Rate limit for anonymous users (can be overridden by backend response)
+const DEFAULT_RATE_LIMIT = 40
+
 // Get stored auth token
 const getToken = () => localStorage.getItem('token')
 
@@ -294,7 +297,7 @@ function App() {
         if (response.status === 429) {
           // Rate limit exceeded for anonymous users
           const errorData = await response.json()
-          setRateLimitInfo({ remaining: 0, limit: errorData.detail?.limit || 5 })
+          setRateLimitInfo({ remaining: 0, limit: errorData.detail?.limit || DEFAULT_RATE_LIMIT })
           throw new Error('RATE_LIMIT_EXCEEDED')
         }
         throw new Error(`API error: ${response.status}`)
@@ -349,7 +352,7 @@ function App() {
               
               // Track remaining questions for anonymous users
               if (data.remaining_questions !== undefined && !user) {
-                setRateLimitInfo({ remaining: data.remaining_questions, limit: 5 })
+                setRateLimitInfo({ remaining: data.remaining_questions, limit: data.limit || DEFAULT_RATE_LIMIT })
               }
               
               if (token) {
@@ -403,7 +406,7 @@ function App() {
       // Determine error message
       let errorMessage = 'Sorry, I encountered an error. Please try again.'
       if (error.message === 'RATE_LIMIT_EXCEEDED') {
-        errorMessage = "You've reached your daily limit of 5 questions. Sign in for unlimited access!"
+        errorMessage = `You've reached your daily limit of ${DEFAULT_RATE_LIMIT} questions. Sign in for unlimited access!`
       }
       
       // Add error message
