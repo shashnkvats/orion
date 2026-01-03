@@ -4,18 +4,67 @@ import Sidebar from './components/Sidebar'
 import ChatArea from './components/ChatArea'
 import ShareModal from './components/ShareModal'
 import FeedbackModal from './components/FeedbackModal'
+import AuthModal from './components/AuthModal'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
-// Get or create a persistent user ID
-const getUserId = () => {
-  let userId = localStorage.getItem('userId')
-  if (!userId) {
-    userId = crypto.randomUUID()
-    localStorage.setItem('userId', userId)
-  }
-  return userId
+// Get stored auth token
+const getToken = () => localStorage.getItem('token')
+
+// Get stored user info
+const getStoredUser = () => {
+  const user = localStorage.getItem('user')
+  return user ? JSON.parse(user) : null
 }
+
+// Check if user is authenticated
+const isAuthenticated = () => !!getToken() && !!getStoredUser()
+
+// API functions with auth headers
+const api = {
+  getHeaders() {
+    const token = getToken()
+    return {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    }
+  },
+
+  async fetchConversations(offset = 0, limit = 50) {
+    const res = await fetch(
+      `${API_BASE_URL}/conversations?offset=${offset}&limit=${limit}`,
+      { headers: this.getHeaders() }
+    )
+    if (res.status === 401) throw new Error('AUTH_EXPIRED')
+    if (!res.ok) throw new Error('Failed to fetch conversations')
+    return res.json()
+  },
+
+  async fetchMessages(threadId, offset = 0, limit = 100) {
+    const res = await fetch(
+      `${API_BASE_URL}/conversations/${threadId}/messages?offset=${offset}&limit=${limit}`,
+      { headers: this.getHeaders() }
+    )
+    if (res.status === 401) throw new Error('AUTH_EXPIRED')
+    if (!res.ok) throw new Error('Failed to fetch messages')
+    return res.json()
+  }
+}
+
+// Default welcome thread for new users
+const createWelcomeThread = () => ({
+  id: uuidv4(),
+  title: 'Welcome',
+  messages: [{
+    id: uuidv4(),
+    role: 'assistant',
+    content: 'Hello! I\'m here to help. What would you like to know?',
+    timestamp: new Date().toISOString(),
+    rating: null
+  }],
+  createdAt: new Date().toISOString(),
+  isLoaded: true // Messages already loaded
+})
 
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -23,38 +72,149 @@ function App() {
     if (saved) return saved === 'dark'
     return window.matchMedia('(prefers-color-scheme: dark)').matches
   })
+
+  // Auth state
+  const [user, setUser] = useState(getStoredUser)
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [isLoadingThreads, setIsLoadingThreads] = useState(false)
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   
   const [threads, setThreads] = useState(() => {
-    const saved = localStorage.getItem('threads')
-    if (saved) return JSON.parse(saved)
-    return [{
-      id: uuidv4(),
-      title: 'Welcome',
-      messages: [{
-        id: uuidv4(),
-        role: 'assistant',
-        content: 'Hello! I\'m here to help. What would you like to know?',
-        timestamp: new Date().toISOString(),
-        rating: null
-      }],
-      createdAt: new Date().toISOString()
-    }]
+    // For unauthenticated users, load from localStorage
+    if (!isAuthenticated()) {
+      const saved = localStorage.getItem('threads')
+      if (saved) return JSON.parse(saved)
+      return [createWelcomeThread()]
+    }
+    // For authenticated users, start empty and load from API
+    return []
   })
   
-  const [activeThreadId, setActiveThreadId] = useState(() => threads[0]?.id || null)
+  const [activeThreadId, setActiveThreadId] = useState(() => {
+    if (!isAuthenticated()) {
+      const saved = localStorage.getItem('threads')
+      if (saved) {
+        const threads = JSON.parse(saved)
+        return threads[0]?.id || null
+      }
+    }
+    return null
+  })
+  
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isTyping, setIsTyping] = useState(false)
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [feedbackModal, setFeedbackModal] = useState({ open: false, messageId: null })
 
+  // Handle auth expiry
+  const handleAuthExpired = useCallback(() => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    setUser(null)
+    setAuthModalOpen(true)
+  }, [])
+
+  // Load conversations from API for authenticated users
+  useEffect(() => {
+    if (!user) return
+
+    const loadConversations = async () => {
+      setIsLoadingThreads(true)
+      try {
+        const data = await api.fetchConversations()
+        const loadedThreads = data.threads.map(t => ({
+          id: t.thread_id,
+          title: t.title || 'Untitled',
+          messages: [], // Messages loaded on demand
+          createdAt: t.created_at,
+          updatedAt: t.updated_at,
+          isLoaded: false // Flag to track if messages are loaded
+        }))
+        
+        if (loadedThreads.length > 0) {
+          setThreads(loadedThreads)
+          setActiveThreadId(loadedThreads[0].id)
+        } else {
+          // No threads yet, create a welcome one
+          const welcome = createWelcomeThread()
+          setThreads([welcome])
+          setActiveThreadId(welcome.id)
+        }
+      } catch (error) {
+        if (error.message === 'AUTH_EXPIRED') {
+          handleAuthExpired()
+          return
+        }
+        console.error('Failed to load conversations:', error)
+        // Fallback to welcome thread
+        const welcome = createWelcomeThread()
+        setThreads([welcome])
+        setActiveThreadId(welcome.id)
+      } finally {
+        setIsLoadingThreads(false)
+      }
+    }
+
+    loadConversations()
+  }, [user, handleAuthExpired])
+
+  // Load messages when selecting a thread (for authenticated users)
+  useEffect(() => {
+    if (!user || !activeThreadId) return
+
+    const thread = threads.find(t => t.id === activeThreadId)
+    if (!thread || thread.isLoaded) return
+
+    const loadMessages = async () => {
+      setIsLoadingMessages(true)
+      try {
+        const data = await api.fetchMessages(activeThreadId)
+        setThreads(prev => prev.map(t => {
+          if (t.id === activeThreadId) {
+            return {
+              ...t,
+              messages: data.messages.map(m => ({
+                id: m.message_id,
+                role: m.role === 'assistant' ? 'assistant' : 'user',
+                content: m.content,
+                timestamp: m.created_at,
+                rating: null
+              })),
+              isLoaded: true
+            }
+          }
+          return t
+        }))
+      } catch (error) {
+        if (error.message === 'AUTH_EXPIRED') {
+          handleAuthExpired()
+          return
+        }
+        console.error('Failed to load messages:', error)
+        // Mark as loaded to prevent infinite retries
+        setThreads(prev => prev.map(t => 
+          t.id === activeThreadId ? { ...t, isLoaded: true } : t
+        ))
+      } finally {
+        setIsLoadingMessages(false)
+      }
+    }
+
+    loadMessages()
+  }, [user, activeThreadId, threads, handleAuthExpired])
+
+  // Save to localStorage for unregistered users
   useEffect(() => {
     localStorage.setItem('theme', isDarkMode ? 'dark' : 'light')
     document.documentElement.classList.toggle('dark', isDarkMode)
   }, [isDarkMode])
 
   useEffect(() => {
-    localStorage.setItem('threads', JSON.stringify(threads))
-  }, [threads])
+    // Only save to localStorage for unauthenticated users
+    if (!user) {
+      localStorage.setItem('threads', JSON.stringify(threads))
+    }
+  }, [threads, user])
 
   const activeThread = threads.find(t => t.id === activeThreadId)
 
@@ -63,7 +223,8 @@ function App() {
       id: uuidv4(),
       title: 'New Conversation',
       messages: [],
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      isLoaded: true // New thread, no messages to load
     }
     setThreads(prev => [newThread, ...prev])
     setActiveThreadId(newThread.id)
@@ -77,12 +238,14 @@ function App() {
       }
       return filtered
     })
+    // TODO: For registered users, also call API to soft-delete
   }, [activeThreadId])
 
   const renameThread = useCallback((threadId, newTitle) => {
     setThreads(prev => prev.map(t => 
       t.id === threadId ? { ...t, title: newTitle } : t
     ))
+    // TODO: For registered users, also call API to update title
   }, [])
 
   const sendMessage = useCallback(async (content) => {
@@ -119,11 +282,8 @@ function App() {
     try {
       const response = await fetch(`${API_BASE_URL}/chat/stream`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: api.getHeaders(),
         body: JSON.stringify({
-          userId: getUserId(),
           threadId: activeThreadId,
           message: content.trim()
         })
@@ -305,6 +465,30 @@ function App() {
     }
   }, [activeThread])
 
+  // Auth handlers
+  const handleAuthSuccess = useCallback((userData, token) => {
+    setUser(userData)
+    // Clear localStorage threads - they'll be loaded from API
+    localStorage.removeItem('threads')
+    // Reset threads to trigger API load
+    setThreads([])
+    setActiveThreadId(null)
+  }, [])
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    setUser(null)
+    // Reset to welcome thread
+    const welcome = createWelcomeThread()
+    setThreads([welcome])
+    setActiveThreadId(welcome.id)
+  }, [])
+
+  const openAuthModal = useCallback(() => {
+    setAuthModalOpen(true)
+  }, [])
+
   return (
     <div className={`h-full flex ${isDarkMode ? 'bg-apple-darkBg' : 'bg-apple-bg'}`}>
       <Sidebar 
@@ -319,6 +503,10 @@ function App() {
         isDarkMode={isDarkMode}
         onToggleTheme={() => setIsDarkMode(!isDarkMode)}
         onShare={() => setShareModalOpen(true)}
+        isLoading={isLoadingThreads}
+        user={user}
+        onLogin={openAuthModal}
+        onLogout={handleLogout}
       />
 
       <ChatArea 
@@ -329,6 +517,9 @@ function App() {
         isDarkMode={isDarkMode}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        isLoadingMessages={isLoadingMessages}
+        user={user}
+        onLogin={openAuthModal}
       />
 
       <ShareModal 
@@ -342,6 +533,13 @@ function App() {
         isOpen={feedbackModal.open}
         onClose={() => setFeedbackModal({ open: false, messageId: null })}
         onSubmit={(feedback) => submitFeedback(feedbackModal.messageId, feedback)}
+        isDarkMode={isDarkMode}
+      />
+
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
         isDarkMode={isDarkMode}
       />
     </div>

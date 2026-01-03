@@ -12,7 +12,10 @@ const Sidebar = ({
   onToggle,
   isDarkMode,
   onToggleTheme,
-  onShare
+  onShare,
+  user,
+  onLogin,
+  onLogout
 }) => {
   const [editingId, setEditingId] = useState(null)
   const [editTitle, setEditTitle] = useState('')
@@ -197,7 +200,7 @@ const Sidebar = ({
           </div>
 
           {/* Footer */}
-          <div className="p-2">
+          <div className="p-2 space-y-1">
             <button
               onClick={onShare}
               className={`
@@ -233,6 +236,51 @@ const Sidebar = ({
                   ${isDarkMode ? 'translate-x-4' : 'translate-x-0.5'}
                 `} />
               </button>
+            </div>
+
+            {/* Auth section */}
+            <div className={`pt-2 mt-2 border-t ${isDarkMode ? 'border-apple-darkSeparator' : 'border-apple-separator'}`}>
+              {user ? (
+                <div className="space-y-1">
+                  <div className={`px-2 py-1.5 text-[13px] ${isDarkMode ? 'text-apple-darkLabel' : 'text-apple-label'}`}>
+                    <div className="font-medium truncate">{user.name}</div>
+                    <div className={`text-[11px] truncate ${isDarkMode ? 'text-apple-darkLabelSecondary' : 'text-apple-labelSecondary'}`}>
+                      {user.email}
+                    </div>
+                  </div>
+                  <button
+                    onClick={onLogout}
+                    className={`
+                      w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[13px]
+                      press-effect apple-focus
+                      ${isDarkMode 
+                        ? 'hover:bg-apple-darkBgTertiary text-apple-darkLabelSecondary hover:text-red-400' 
+                        : 'hover:bg-apple-bgTertiary text-apple-labelSecondary hover:text-red-500'}
+                    `}
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                    </svg>
+                    Sign out
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={onLogin}
+                  className={`
+                    w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[13px]
+                    press-effect apple-focus
+                    ${isDarkMode 
+                      ? 'hover:bg-apple-darkBgTertiary text-apple-blue' 
+                      : 'hover:bg-apple-bgTertiary text-apple-blue'}
+                  `}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                  </svg>
+                  Sign in
+                </button>
+              )}
             </div>
           </div>
         </div>

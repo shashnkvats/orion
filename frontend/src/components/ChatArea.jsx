@@ -9,7 +9,9 @@ const ChatArea = ({
   isTyping, 
   isDarkMode,
   sidebarOpen,
-  onToggleSidebar
+  onToggleSidebar,
+  user,
+  onLogin
 }) => {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
@@ -100,6 +102,20 @@ const ChatArea = ({
             <p className={`${isDarkMode ? 'text-apple-darkLabelSecondary' : 'text-apple-labelSecondary'} max-w-sm mx-auto`}>
               Ask me anything. I'm here to assist with questions, ideas, and more.
             </p>
+            {!user && (
+              <button
+                onClick={onLogin}
+                className={`
+                  mt-4 px-4 py-2 rounded-xl text-sm font-medium
+                  transition-colors duration-200
+                  ${isDarkMode 
+                    ? 'bg-apple-darkBgTertiary hover:bg-apple-darkBgElevated text-apple-blue' 
+                    : 'bg-apple-bgSecondary hover:bg-apple-bgTertiary text-apple-blue'}
+                `}
+              >
+                Sign in to save conversations
+              </button>
+            )}
           </motion.div>
 
           {/* Centered Input */}
