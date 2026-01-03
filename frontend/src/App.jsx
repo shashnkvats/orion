@@ -52,17 +52,14 @@ const api = {
   }
 }
 
+// Default welcome thread ID for new users (stable across state initializations)
+const WELCOME_THREAD_ID = 'welcome-thread'
+
 // Default welcome thread for new users
 const createWelcomeThread = () => ({
-  id: uuidv4(),
+  id: WELCOME_THREAD_ID,
   title: 'Welcome',
-  messages: [{
-    id: uuidv4(),
-    role: 'assistant',
-    content: 'Hello! I\'m here to help. What would you like to know?',
-    timestamp: new Date().toISOString(),
-    rating: null
-  }],
+  messages: [],  // Empty - show the centered welcome UI
   createdAt: new Date().toISOString(),
   isLoaded: true // Messages already loaded
 })
@@ -98,6 +95,8 @@ function App() {
         const threads = JSON.parse(saved)
         return threads[0]?.id || null
       }
+      // No saved threads - use the welcome thread ID
+      return WELCOME_THREAD_ID
     }
     return null
   })
