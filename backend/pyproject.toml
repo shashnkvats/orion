@@ -13,5 +13,8 @@ dependencies = [
     "langgraph-checkpoint-postgres>=3.0.2",
     "psycopg[binary,pool]>=3.3.2",
     "pydantic-settings>=2.0.0",
+    "pydantic[email]>=2.0.0",
     "uvicorn>=0.30.0",
+    "python-jose[cryptography]>=3.3.0",
+    "bcrypt>=4.0.0",
 ]
