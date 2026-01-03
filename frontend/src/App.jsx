@@ -542,6 +542,7 @@ function App() {
         user={user}
         onLogin={openAuthModal}
         rateLimitInfo={rateLimitInfo}
+        onNewThread={createNewThread}
       />
 
       <ShareModal 

@@ -12,7 +12,8 @@ const ChatArea = ({
   onToggleSidebar,
   user,
   onLogin,
-  rateLimitInfo
+  rateLimitInfo,
+  onNewThread
 }) => {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
@@ -27,7 +28,16 @@ const ChatArea = ({
   const handleSubmit = (e) => {
     e.preventDefault()
     if (input.trim() && !isRateLimited) {
-      onSendMessage(input)
+      // If no thread exists, create one first
+      if (!thread && onNewThread) {
+        onNewThread()
+        // Small delay to ensure thread is created before sending message
+        setTimeout(() => {
+          onSendMessage(input)
+        }, 0)
+      } else {
+        onSendMessage(input)
+      }
       setInput('')
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
     }
@@ -48,29 +58,8 @@ const ChatArea = ({
 
   const hasMessages = thread && thread.messages.length > 0
 
-  // No thread selected
-  if (!thread) {
-    return (
-      <div className={`flex-1 flex items-center justify-center ${isDarkMode ? 'bg-apple-darkBg' : 'bg-apple-bg'}`}>
-        <div className="text-center">
-          <div className="w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 shadow-apple">
-            <svg className="w-11 h-11 text-white" viewBox="0 0 100 100" fill="currentColor">
-              <path d="M50 15 L54 32 L68 22 L56 36 L75 40 L56 44 L68 58 L53 46 L50 70 L47 46 L32 58 L44 44 L25 40 L44 36 L32 22 L46 32 Z"/>
-            </svg>
-          </div>
-          <h2 className={`text-2xl font-semibold mb-2 tracking-tight ${isDarkMode ? 'text-apple-darkLabel' : 'text-apple-label'}`}>
-            Orion
-          </h2>
-          <p className={`${isDarkMode ? 'text-apple-darkLabelSecondary' : 'text-apple-labelSecondary'}`}>
-            Select a conversation to continue
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  // Empty state - centered layout
-  if (!hasMessages) {
+  // No thread selected OR empty thread - show centered layout with input
+  if (!thread || !hasMessages) {
     return (
       <div className={`flex-1 flex flex-col h-full relative ${isDarkMode ? 'bg-apple-darkBg' : 'bg-apple-bg'}`}>
         {/* Minimal Header - only show toggle when sidebar closed */}
