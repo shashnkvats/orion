@@ -106,6 +106,7 @@ function App() {
   const [isTyping, setIsTyping] = useState(false)
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [feedbackModal, setFeedbackModal] = useState({ open: false, messageId: null })
+  const [rateLimitInfo, setRateLimitInfo] = useState(null) // { remaining: number, limit: number } for anonymous users
 
   // Handle auth expiry
   const handleAuthExpired = useCallback(() => {
@@ -291,6 +292,12 @@ function App() {
       })
 
       if (!response.ok) {
+        if (response.status === 429) {
+          // Rate limit exceeded for anonymous users
+          const errorData = await response.json()
+          setRateLimitInfo({ remaining: 0, limit: errorData.detail?.limit || 5 })
+          throw new Error('RATE_LIMIT_EXCEEDED')
+        }
         throw new Error(`API error: ${response.status}`)
       }
 
@@ -341,6 +348,11 @@ function App() {
                 token = data.token || data.content || data.text || ''
               }
               
+              // Track remaining questions for anonymous users
+              if (data.remaining_questions !== undefined && !user) {
+                setRateLimitInfo({ remaining: data.remaining_questions, limit: 5 })
+              }
+              
               if (token) {
                 // Hide typing indicator once we start receiving content
                 setIsTyping(false)
@@ -389,6 +401,12 @@ function App() {
     } catch (error) {
       console.error('Failed to get response:', error)
       
+      // Determine error message
+      let errorMessage = 'Sorry, I encountered an error. Please try again.'
+      if (error.message === 'RATE_LIMIT_EXCEEDED') {
+        errorMessage = "You've reached your daily limit of 5 questions. Sign in for unlimited access!"
+      }
+      
       // Add error message
       setThreads(prev => prev.map(t => {
         if (t.id === activeThreadId) {
@@ -399,7 +417,7 @@ function App() {
               ...t,
               messages: t.messages.map(m => 
                 m.id === aiMessageId 
-                  ? { ...m, content: m.content || 'Sorry, I encountered an error. Please try again.' }
+                  ? { ...m, content: m.content || errorMessage }
                   : m
               )
             }
@@ -410,7 +428,7 @@ function App() {
               messages: [...t.messages, {
                 id: aiMessageId,
                 role: 'assistant',
-                content: 'Sorry, I encountered an error. Please try again.',
+                content: errorMessage,
                 timestamp: new Date().toISOString(),
                 rating: null
               }]
@@ -474,6 +492,8 @@ function App() {
     // Reset threads to trigger API load
     setThreads([])
     setActiveThreadId(null)
+    // Clear rate limit info - authenticated users have unlimited access
+    setRateLimitInfo(null)
   }, [])
 
   const handleLogout = useCallback(() => {
@@ -521,6 +541,7 @@ function App() {
         isLoadingMessages={isLoadingMessages}
         user={user}
         onLogin={openAuthModal}
+        rateLimitInfo={rateLimitInfo}
       />
 
       <ShareModal 

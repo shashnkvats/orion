@@ -11,7 +11,8 @@ const ChatArea = ({
   sidebarOpen,
   onToggleSidebar,
   user,
-  onLogin
+  onLogin,
+  rateLimitInfo
 }) => {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
@@ -21,9 +22,11 @@ const ChatArea = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [thread?.messages, isTyping])
 
+  const isRateLimited = !user && rateLimitInfo?.remaining === 0
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (input.trim()) {
+    if (input.trim() && !isRateLimited) {
       onSendMessage(input)
       setInput('')
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
@@ -143,10 +146,10 @@ const ChatArea = ({
                 />
                 <button
                   type="submit"
-                  disabled={!input.trim()}
+                  disabled={!input.trim() || isRateLimited}
                   className={`
                     m-1.5 p-2.5 rounded-full transition-all duration-200 press-effect
-                    ${input.trim() 
+                    ${input.trim() && !isRateLimited
                       ? 'bg-apple-blue text-white' 
                       : isDarkMode 
                         ? 'bg-apple-darkBgElevated text-apple-darkLabelTertiary' 
@@ -161,6 +164,18 @@ const ChatArea = ({
               <p className={`text-xs text-center mt-3 ${isDarkMode ? 'text-apple-darkLabelTertiary' : 'text-apple-labelTertiary'}`}>
                 Orion may produce inaccurate information.
               </p>
+              {!user && rateLimitInfo !== null && (
+                <p className={`text-xs text-center mt-2 ${
+                  rateLimitInfo.remaining === 0 
+                    ? 'text-red-500' 
+                    : isDarkMode ? 'text-apple-darkLabelSecondary' : 'text-apple-labelSecondary'
+                }`}>
+                  {rateLimitInfo.remaining === 0 
+                    ? <>Daily limit reached. <button onClick={onLogin} className="text-apple-blue hover:underline">Sign in</button> for unlimited access.</>
+                    : `${rateLimitInfo.remaining} of ${rateLimitInfo.limit} free questions remaining today`
+                  }
+                </p>
+              )}
             </form>
           </div>
         </div>
@@ -269,10 +284,10 @@ const ChatArea = ({
             />
             <button
               type="submit"
-              disabled={!input.trim()}
+              disabled={!input.trim() || isRateLimited}
               className={`
                 m-1.5 p-2.5 rounded-full transition-all duration-200 press-effect
-                ${input.trim() 
+                ${input.trim() && !isRateLimited
                   ? 'bg-apple-blue text-white' 
                   : isDarkMode 
                     ? 'bg-apple-darkBgElevated text-apple-darkLabelTertiary' 
@@ -287,6 +302,18 @@ const ChatArea = ({
           <p className={`text-xs text-center mt-3 ${isDarkMode ? 'text-apple-darkLabelTertiary' : 'text-apple-labelTertiary'}`}>
             Orion may produce inaccurate information.
           </p>
+          {!user && rateLimitInfo !== null && (
+            <p className={`text-xs text-center mt-2 ${
+              rateLimitInfo.remaining === 0 
+                ? 'text-red-500' 
+                : isDarkMode ? 'text-apple-darkLabelSecondary' : 'text-apple-labelSecondary'
+            }`}>
+              {rateLimitInfo.remaining === 0 
+                ? <>Daily limit reached. <button onClick={onLogin} className="text-apple-blue hover:underline">Sign in</button> for unlimited access.</>
+                : `${rateLimitInfo.remaining} of ${rateLimitInfo.limit} free questions remaining today`
+              }
+            </p>
+          )}
         </form>
       </div>
     </div>
