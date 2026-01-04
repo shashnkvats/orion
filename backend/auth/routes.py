@@ -4,7 +4,7 @@ Authentication routes: signup, login, get current user
 from fastapi import APIRouter, HTTPException, status, Depends
 import uuid
 
-from auth.settings.SCHEMAs import SignupRequest, LoginRequest, TokenResponse, UserResponse
+from auth.schemas import SignupRequest, LoginRequest, TokenResponse, UserResponse
 from auth.utils import hash_password, verify_password, create_access_token
 from auth.dependencies import get_current_user
 from db.pool import db
@@ -12,7 +12,7 @@ from agent.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-
+import time
 
 @router.post("/signup", response_model=TokenResponse)
 async def signup(request: SignupRequest):
@@ -63,26 +63,32 @@ async def login(request: LoginRequest):
     """
     Authenticate user and return JWT token.
     """
+    start_time = time.time()
     async with db.pool.acquire() as conn:
         user = await conn.fetchrow(
             f"SELECT user_id, email, name, password_hash FROM {settings.SCHEMA}.users WHERE email = $1",
             request.email
         )
-    
+    end_time = time.time()
+    print(f"Time taken to fetch user: {end_time - start_time} seconds")
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
-    
+    start_time = time.time()
     if not verify_password(request.password, user["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
-    
+    end_time = time.time()
+    print(f"Time taken to verify password: {end_time - start_time} seconds")
     # Generate token
+    start_time = time.time()
     access_token = create_access_token(data={"sub": str(user["user_id"])})
+    end_time = time.time()
+    print(f"Time taken to generate token: {end_time - start_time} seconds")
     
     return TokenResponse(
         access_token=access_token,

@@ -13,6 +13,8 @@ import json
 
 router = APIRouter()
 
+import time
+
 
 async def check_anonymous_rate_limit(ip_address: str) -> dict:
     """
@@ -80,6 +82,7 @@ async def get_conversations(
     try:
         async with db.pool.acquire() as conn:
             # Get threads with pagination
+            start_time = time.time()
             rows = await conn.fetch(f"""
                 SELECT 
                     thread_id,
@@ -93,14 +96,17 @@ async def get_conversations(
                 OFFSET $2
                 LIMIT $3
             """, uuid.UUID(user_id), offset, limit)
-            
+            end_time = time.time()
+            print(f"Time taken to fetch threads: {end_time - start_time} seconds")
             # Get total count for pagination metadata
+            start_time = time.time()
             total = await conn.fetchval(f"""
                 SELECT COUNT(*) 
                 FROM {settings.SCHEMA}.conversation_threads
                 WHERE user_id = $1 AND is_deleted = false
             """, uuid.UUID(user_id))
-            
+            end_time = time.time()
+            print(f"Time taken to fetch total count: {end_time - start_time} seconds")
             threads = [
                 {
                     "thread_id": str(row["thread_id"]),
@@ -141,15 +147,18 @@ async def get_thread_messages(
     try:
         async with db.pool.acquire() as conn:
             # Verify thread belongs to user
+            start_time = time.time()
             thread = await conn.fetchrow(f"""
                 SELECT thread_id FROM {settings.SCHEMA}.conversation_threads
                 WHERE thread_id = $1 AND user_id = $2 AND is_deleted = false
             """, uuid.UUID(thread_id), uuid.UUID(user_id))
-            
+            end_time = time.time()
+            print(f"Time taken to fetch thread: {end_time - start_time} seconds")
             if not thread:
                 raise HTTPException(status_code=404, detail="Thread not found")
             
             # Get messages
+            start_time = time.time()
             rows = await conn.fetch(f"""
                 SELECT 
                     message_id,
@@ -164,7 +173,8 @@ async def get_thread_messages(
                 OFFSET $2
                 LIMIT $3
             """, uuid.UUID(thread_id), offset, limit)
-            
+            end_time = time.time()
+            print(f"Time taken to fetch messages: {end_time - start_time} seconds")
             messages = [
                 {
                     "message_id": str(row["message_id"]),
@@ -206,7 +216,7 @@ async def chat_stream(
     """
     is_anonymous = current_user is None
     rate_limit_info = None
-    
+    start_time = time.time()
     # Check rate limit for anonymous users
     if is_anonymous:
         client_ip = get_client_ip(request)
@@ -221,7 +231,8 @@ async def chat_stream(
                     "limit": settings.ANONYMOUS_DAILY_LIMIT
                 }
             )
-    
+    end_time = time.time()
+    print(f"Time taken to check rate limit: {end_time - start_time} seconds")
     async def generate():
         try:
             user_id = current_user["user_id"] if current_user else None
