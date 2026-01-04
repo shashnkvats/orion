@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     pg_uri: str = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_dbname}?sslmode=require"
     CHECKPOINT_TTL: int = 60 * 60 * 24 * 30 # 30 days
 
+    ANONYMOUS_DAILY_LIMIT: int = 40
+
     class Config:
         case_sensitive = False
 

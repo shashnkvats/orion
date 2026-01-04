@@ -6,6 +6,7 @@ from schema import ChatRequest
 from agent.builder import agent_service
 from auth.dependencies import get_current_user, get_optional_user
 from db.pool import db
+from agent.config import settings
 
 import uuid
 import json
@@ -13,7 +14,7 @@ import json
 router = APIRouter()
 
 SCHEMA = "orion"
-ANONYMOUS_DAILY_LIMIT = 40
+
 
 
 async def check_anonymous_rate_limit(ip_address: str) -> dict:
@@ -34,13 +35,13 @@ async def check_anonymous_rate_limit(ip_address: str) -> dict:
                 INSERT INTO {SCHEMA}.anonymous_usage (ip_address, usage_date, request_count)
                 VALUES ($1, CURRENT_DATE, 1)
             """, ip_address)
-            return {"allowed": True, "remaining": ANONYMOUS_DAILY_LIMIT - 1, "limit": ANONYMOUS_DAILY_LIMIT}
+            return {"allowed": True, "remaining": settings.ANONYMOUS_DAILY_LIMIT - 1, "limit": settings.ANONYMOUS_DAILY_LIMIT}
         
         current_count = row["request_count"]
         
-        if current_count >= ANONYMOUS_DAILY_LIMIT:
+        if current_count >= settings.ANONYMOUS_DAILY_LIMIT:
             # Limit exceeded
-            return {"allowed": False, "remaining": 0, "limit": ANONYMOUS_DAILY_LIMIT}
+            return {"allowed": False, "remaining": 0, "limit": settings.ANONYMOUS_DAILY_LIMIT}
         
         # Increment counter
         await conn.execute(f"""
@@ -49,7 +50,7 @@ async def check_anonymous_rate_limit(ip_address: str) -> dict:
             WHERE ip_address = $1 AND usage_date = CURRENT_DATE
         """, ip_address)
         
-        return {"allowed": True, "remaining": ANONYMOUS_DAILY_LIMIT - current_count - 1, "limit": ANONYMOUS_DAILY_LIMIT}
+        return {"allowed": True, "remaining": settings.ANONYMOUS_DAILY_LIMIT - current_count - 1, "limit": settings.ANONYMOUS_DAILY_LIMIT}
 
 
 def get_client_ip(request: Request) -> str:
@@ -220,7 +221,7 @@ async def chat_stream(
                 detail={
                     "message": "Daily limit reached. Sign in for unlimited access.",
                     "remaining": 0,
-                    "limit": ANONYMOUS_DAILY_LIMIT
+                    "limit": settings.ANONYMOUS_DAILY_LIMIT
                 }
             )
     
