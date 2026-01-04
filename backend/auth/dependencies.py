@@ -8,10 +8,10 @@ import uuid
 
 from auth.utils import decode_token
 from db.pool import db
+from agent.config import settings
 
 security = HTTPBearer()
 
-SCHEMA = "orion"
 
 
 async def get_current_user(
@@ -41,7 +41,7 @@ async def get_current_user(
     # Fetch user from database
     async with db.pool.acquire() as conn:
         user = await conn.fetchrow(
-            f"SELECT user_id, email, name FROM {SCHEMA}.users WHERE user_id = $1",
+            f"SELECT user_id, email, name FROM {settings.SCHEMA}.users WHERE user_id = $1",
             uuid.UUID(user_id)
         )
     

@@ -4,11 +4,9 @@ import json
 from datetime import datetime
 from typing import Optional
 from db.pool import db
-
+from agent.config import settings
 from agent.utils import generate_thread_title
 
-# Schema where tables are located
-SCHEMA = "orion"
 
 
 async def persist_thread(thread_id: uuid.UUID, user_id: uuid.UUID, title: Optional[str] = None):
@@ -16,7 +14,7 @@ async def persist_thread(thread_id: uuid.UUID, user_id: uuid.UUID, title: Option
     try:
         async with db.pool.acquire() as conn:
             await conn.execute(f"""
-                INSERT INTO {SCHEMA}.conversation_threads (thread_id, user_id, thread_title)
+                INSERT INTO {settings.SCHEMA}.conversation_threads (thread_id, user_id, thread_title)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (thread_id) DO UPDATE SET updated_at = now()
             """, thread_id, user_id, title)
@@ -30,7 +28,7 @@ async def persist_turn(thread_id: uuid.UUID, turn_id: uuid.UUID, user_message: s
     try:
         async with db.pool.acquire() as conn:
             await conn.execute(f"""
-                INSERT INTO {SCHEMA}.conversation_turns (turn_id, thread_id, user_message, status)
+                INSERT INTO {settings.SCHEMA}.conversation_turns (turn_id, thread_id, user_message, status)
                 VALUES ($1, $2, $3, $4)
             """, turn_id, thread_id, user_message, status)
     except Exception as e:
@@ -54,14 +52,14 @@ async def persist_thread_and_turn(
             async with conn.transaction():
                 # First: ensure thread exists (upsert)
                 await conn.execute(f"""
-                    INSERT INTO {SCHEMA}.conversation_threads (thread_id, user_id, thread_title)
+                    INSERT INTO {settings.SCHEMA}.conversation_threads (thread_id, user_id, thread_title)
                     VALUES ($1, $2, $3)
                     ON CONFLICT (thread_id) DO UPDATE SET updated_at = now()
                 """, thread_id, user_id, thread_title)
                 
                 # Second: create the turn (thread now guaranteed to exist)
                 await conn.execute(f"""
-                    INSERT INTO {SCHEMA}.conversation_turns (turn_id, thread_id, user_message, status)
+                    INSERT INTO {settings.SCHEMA}.conversation_turns (turn_id, thread_id, user_message, status)
                     VALUES ($1, $2, $3, 'running')
                 """, turn_id, thread_id, user_message)
     except Exception as e:
@@ -73,7 +71,7 @@ async def update_turn_status(turn_id: uuid.UUID, status: str):
     try:
         async with db.pool.acquire() as conn:
             await conn.execute(f"""
-                UPDATE {SCHEMA}.conversation_turns SET status = $2 WHERE turn_id = $1
+                UPDATE {settings.SCHEMA}.conversation_turns SET status = $2 WHERE turn_id = $1
             """, turn_id, status)
     except Exception as e:
         print(f"[update_turn_status] Error: {e}")
@@ -91,7 +89,7 @@ async def persist_message(
         message_id = uuid.uuid4()
         async with db.pool.acquire() as conn:
             await conn.execute(f"""
-                INSERT INTO {SCHEMA}.chat_messages (message_id, thread_id, turn_id, role, message, metadata)
+                INSERT INTO {settings.SCHEMA}.chat_messages (message_id, thread_id, turn_id, role, message, metadata)
                 VALUES ($1, $2, $3, $4, $5, $6)
             """, message_id, thread_id, turn_id, role, message, json.dumps(metadata) if metadata else None)
     except Exception as e:
@@ -111,25 +109,25 @@ async def persist_turn_complete(
             async with conn.transaction():
                 # Save user message
                 await conn.execute(f"""
-                    INSERT INTO {SCHEMA}.chat_messages (message_id, thread_id, turn_id, role, message)
+                    INSERT INTO {settings.SCHEMA}.chat_messages (message_id, thread_id, turn_id, role, message)
                     VALUES ($1, $2, $3, 'user', $4)
                 """, uuid.uuid4(), thread_id, turn_id, user_message)
                 
                 # Save assistant message
                 await conn.execute(f"""
-                    INSERT INTO {SCHEMA}.chat_messages (message_id, thread_id, turn_id, role, message, metadata)
+                    INSERT INTO {settings.SCHEMA}.chat_messages (message_id, thread_id, turn_id, role, message, metadata)
                     VALUES ($1, $2, $3, 'assistant', $4, $5)
                 """, uuid.uuid4(), thread_id, turn_id, assistant_message, 
                     json.dumps(metadata) if metadata else None)
                 
                 # Mark turn as completed
                 await conn.execute(f"""
-                    UPDATE {SCHEMA}.conversation_turns SET status = 'completed' WHERE turn_id = $1
+                    UPDATE {settings.SCHEMA}.conversation_turns SET status = 'completed' WHERE turn_id = $1
                 """, turn_id)
                 
                 # Update thread timestamp
                 await conn.execute(f"""
-                    UPDATE {SCHEMA}.conversation_threads SET updated_at = now() WHERE thread_id = $1
+                    UPDATE {settings.SCHEMA}.conversation_threads SET updated_at = now() WHERE thread_id = $1
                 """, thread_id)
     except Exception as e:
         print(f"[persist_turn_complete] Error: {e}")

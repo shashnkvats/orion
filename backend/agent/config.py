@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     CHECKPOINT_TTL: int = 60 * 60 * 24 * 30 # 30 days
 
     ANONYMOUS_DAILY_LIMIT: int = 40
+    SCHEMA = "orion"
 
     class Config:
         case_sensitive = False

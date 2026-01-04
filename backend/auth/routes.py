@@ -4,14 +4,14 @@ Authentication routes: signup, login, get current user
 from fastapi import APIRouter, HTTPException, status, Depends
 import uuid
 
-from auth.schemas import SignupRequest, LoginRequest, TokenResponse, UserResponse
+from auth.settings.SCHEMAs import SignupRequest, LoginRequest, TokenResponse, UserResponse
 from auth.utils import hash_password, verify_password, create_access_token
 from auth.dependencies import get_current_user
 from db.pool import db
+from agent.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-SCHEMA = "orion"
 
 
 @router.post("/signup", response_model=TokenResponse)
@@ -23,7 +23,7 @@ async def signup(request: SignupRequest):
     async with db.pool.acquire() as conn:
         # Check if email already exists
         existing = await conn.fetchval(
-            f"SELECT user_id FROM {SCHEMA}.users WHERE email = $1",
+            f"SELECT user_id FROM {settings.SCHEMA}.users WHERE email = $1",
             request.email
         )
         
@@ -39,7 +39,7 @@ async def signup(request: SignupRequest):
         
         await conn.execute(
             f"""
-            INSERT INTO {SCHEMA}.users (user_id, email, password_hash, name)
+            INSERT INTO {settings.SCHEMA}.users (user_id, email, password_hash, name)
             VALUES ($1, $2, $3, $4)
             """,
             user_id, request.email, password_hash, request.name
@@ -65,7 +65,7 @@ async def login(request: LoginRequest):
     """
     async with db.pool.acquire() as conn:
         user = await conn.fetchrow(
-            f"SELECT user_id, email, name, password_hash FROM {SCHEMA}.users WHERE email = $1",
+            f"SELECT user_id, email, name, password_hash FROM {settings.SCHEMA}.users WHERE email = $1",
             request.email
         )
     

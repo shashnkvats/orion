@@ -13,9 +13,6 @@ import json
 
 router = APIRouter()
 
-SCHEMA = "orion"
-
-
 
 async def check_anonymous_rate_limit(ip_address: str) -> dict:
     """
@@ -25,14 +22,14 @@ async def check_anonymous_rate_limit(ip_address: str) -> dict:
     async with db.pool.acquire() as conn:
         # Try to get existing record for today
         row = await conn.fetchrow(f"""
-            SELECT request_count FROM {SCHEMA}.anonymous_usage
+            SELECT request_count FROM {settings.SCHEMA}.anonymous_usage
             WHERE ip_address = $1 AND usage_date = CURRENT_DATE
         """, ip_address)
         
         if row is None:
             # First request today - create record
             await conn.execute(f"""
-                INSERT INTO {SCHEMA}.anonymous_usage (ip_address, usage_date, request_count)
+                INSERT INTO {settings.SCHEMA}.anonymous_usage (ip_address, usage_date, request_count)
                 VALUES ($1, CURRENT_DATE, 1)
             """, ip_address)
             return {"allowed": True, "remaining": settings.ANONYMOUS_DAILY_LIMIT - 1, "limit": settings.ANONYMOUS_DAILY_LIMIT}
@@ -45,7 +42,7 @@ async def check_anonymous_rate_limit(ip_address: str) -> dict:
         
         # Increment counter
         await conn.execute(f"""
-            UPDATE {SCHEMA}.anonymous_usage
+            UPDATE {settings.SCHEMA}.anonymous_usage
             SET request_count = request_count + 1, updated_at = NOW()
             WHERE ip_address = $1 AND usage_date = CURRENT_DATE
         """, ip_address)
@@ -90,7 +87,7 @@ async def get_conversations(
                     thread_title,
                     created_at,
                     updated_at
-                FROM {SCHEMA}.conversation_threads
+                FROM {settings.SCHEMA}.conversation_threads
                 WHERE user_id = $1 AND is_deleted = false
                 ORDER BY updated_at DESC
                 OFFSET $2
@@ -100,7 +97,7 @@ async def get_conversations(
             # Get total count for pagination metadata
             total = await conn.fetchval(f"""
                 SELECT COUNT(*) 
-                FROM {SCHEMA}.conversation_threads
+                FROM {settings.SCHEMA}.conversation_threads
                 WHERE user_id = $1 AND is_deleted = false
             """, uuid.UUID(user_id))
             
@@ -145,7 +142,7 @@ async def get_thread_messages(
         async with db.pool.acquire() as conn:
             # Verify thread belongs to user
             thread = await conn.fetchrow(f"""
-                SELECT thread_id FROM {SCHEMA}.conversation_threads
+                SELECT thread_id FROM {settings.SCHEMA}.conversation_threads
                 WHERE thread_id = $1 AND user_id = $2 AND is_deleted = false
             """, uuid.UUID(thread_id), uuid.UUID(user_id))
             
@@ -161,7 +158,7 @@ async def get_thread_messages(
                     message,
                     metadata,
                     created_at
-                FROM {SCHEMA}.chat_messages
+                FROM {settings.SCHEMA}.chat_messages
                 WHERE thread_id = $1 AND is_deleted = false
                 ORDER BY created_at ASC
                 OFFSET $2
