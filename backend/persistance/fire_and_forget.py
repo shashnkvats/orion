@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Optional
 from db.pool import db
 
+from agent.utils import generate_thread_title
+
 # Schema where tables are located
 SCHEMA = "orion"
 
@@ -47,6 +49,7 @@ async def persist_thread_and_turn(
     This avoids the race condition where turn insert fails because thread doesn't exist yet.
     """
     try:
+        thread_title = generate_thread_title(user_message)
         async with db.pool.acquire() as conn:
             async with conn.transaction():
                 # First: ensure thread exists (upsert)
