@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends, Request
 from fastapi.responses import StreamingResponse
 from typing import Optional
 
-from schema import ChatRequest
+from schema import ChatRequest, RenameThreadRequest
 from agent.builder import agent_service
 from auth.dependencies import get_current_user, get_optional_user
 from db.pool import db
@@ -12,7 +12,6 @@ import uuid
 import json
 
 router = APIRouter()
-
 import time
 
 
@@ -194,6 +193,76 @@ async def get_thread_messages(
                     "offset": offset,
                     "limit": limit
                 }
+            }
+    except HTTPException:
+        raise
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/conversations/{thread_id}")
+async def rename_thread(
+    thread_id: str,
+    request: RenameThreadRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Rename a conversation thread.
+    """
+    user_id = current_user["user_id"]
+    try:
+        async with db.pool.acquire() as conn:
+            # Update thread title, ensuring it belongs to user and isn't deleted
+            result = await conn.execute(f"""
+                UPDATE {settings.SCHEMA}.conversation_threads
+                SET thread_title = $1, updated_at = NOW()
+                WHERE thread_id = $2 AND user_id = $3 AND is_deleted = false
+            """, request.title, uuid.UUID(thread_id), uuid.UUID(user_id))
+            
+            # Check if any row was updated
+            if result == "UPDATE 0":
+                raise HTTPException(status_code=404, detail="Thread not found")
+            
+            return {
+                "thread_id": thread_id,
+                "title": request.title,
+                "message": "Thread renamed successfully"
+            }
+    except HTTPException:
+        raise
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/conversations/{thread_id}")
+async def delete_thread(
+    thread_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Soft delete a conversation thread.
+    """
+    user_id = current_user["user_id"]
+    try:
+        async with db.pool.acquire() as conn:
+            # Soft delete the thread
+            result = await conn.execute(f"""
+                UPDATE {settings.SCHEMA}.conversation_threads
+                SET is_deleted = true, updated_at = NOW()
+                WHERE thread_id = $1 AND user_id = $2 AND is_deleted = false
+            """, uuid.UUID(thread_id), uuid.UUID(user_id))
+            
+            # Check if any row was updated
+            if result == "UPDATE 0":
+                raise HTTPException(status_code=404, detail="Thread not found")
+            
+            return {
+                "thread_id": thread_id,
+                "message": "Thread deleted successfully"
             }
     except HTTPException:
         raise

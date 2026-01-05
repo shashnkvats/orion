@@ -45,7 +45,8 @@ const Sidebar = ({
   }
 
   const groupedThreads = threads.reduce((acc, thread) => {
-    const dateKey = formatDate(thread.createdAt)
+    // Use updatedAt for grouping (when thread was last active), fallback to createdAt
+    const dateKey = formatDate(thread.updatedAt || thread.createdAt)
     if (!acc[dateKey]) acc[dateKey] = []
     acc[dateKey].push(thread)
     return acc

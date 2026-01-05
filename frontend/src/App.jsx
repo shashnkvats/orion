@@ -52,6 +52,33 @@ const api = {
     if (res.status === 401) throw new Error('AUTH_EXPIRED')
     if (!res.ok) throw new Error('Failed to fetch messages')
     return res.json()
+  },
+
+  async renameThread(threadId, title) {
+    const res = await fetch(
+      `${API_BASE_URL}/conversations/${threadId}`,
+      {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ title })
+      }
+    )
+    if (res.status === 401) throw new Error('AUTH_EXPIRED')
+    if (!res.ok) throw new Error('Failed to rename thread')
+    return res.json()
+  },
+
+  async deleteThread(threadId) {
+    const res = await fetch(
+      `${API_BASE_URL}/conversations/${threadId}`,
+      {
+        method: 'DELETE',
+        headers: this.getHeaders()
+      }
+    )
+    if (res.status === 401) throw new Error('AUTH_EXPIRED')
+    if (!res.ok) throw new Error('Failed to delete thread')
+    return res.json()
   }
 }
 
@@ -59,13 +86,17 @@ const api = {
 const WELCOME_THREAD_ID = 'welcome-thread'
 
 // Default welcome thread for new users
-const createWelcomeThread = () => ({
-  id: WELCOME_THREAD_ID,
-  title: 'Welcome',
-  messages: [],  // Empty - show the centered welcome UI
-  createdAt: new Date().toISOString(),
-  isLoaded: true // Messages already loaded
-})
+const createWelcomeThread = () => {
+  const now = new Date().toISOString()
+  return {
+    id: WELCOME_THREAD_ID,
+    title: 'Welcome',
+    messages: [],  // Empty - show the centered welcome UI
+    createdAt: now,
+    updatedAt: now,
+    isLoaded: true // Messages already loaded
+  }
+}
 
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -223,18 +254,21 @@ function App() {
   const activeThread = threads.find(t => t.id === activeThreadId)
 
   const createNewThread = useCallback(() => {
+    const now = new Date().toISOString()
     const newThread = {
       id: uuidv4(),
       title: 'New Conversation',
       messages: [],
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
       isLoaded: true // New thread, no messages to load
     }
     setThreads(prev => [newThread, ...prev])
     setActiveThreadId(newThread.id)
   }, [])
 
-  const deleteThread = useCallback((threadId) => {
+  const deleteThread = useCallback(async (threadId) => {
+    // Optimistic update - remove from UI immediately
     setThreads(prev => {
       const filtered = prev.filter(t => t.id !== threadId)
       if (activeThreadId === threadId) {
@@ -242,15 +276,42 @@ function App() {
       }
       return filtered
     })
-    // TODO: For registered users, also call API to soft-delete
-  }, [activeThreadId])
 
-  const renameThread = useCallback((threadId, newTitle) => {
+    // For authenticated users, also call API to soft-delete
+    if (user) {
+      try {
+        await api.deleteThread(threadId)
+      } catch (error) {
+        if (error.message === 'AUTH_EXPIRED') {
+          handleAuthExpired()
+          return
+        }
+        console.error('Failed to delete thread on server:', error)
+        // Could restore the thread here if needed, but soft-delete is forgiving
+      }
+    }
+  }, [activeThreadId, user, handleAuthExpired])
+
+  const renameThread = useCallback(async (threadId, newTitle) => {
+    // Optimistic update - update UI immediately
     setThreads(prev => prev.map(t => 
       t.id === threadId ? { ...t, title: newTitle } : t
     ))
-    // TODO: For registered users, also call API to update title
-  }, [])
+
+    // For authenticated users, also call API to update title
+    if (user) {
+      try {
+        await api.renameThread(threadId, newTitle)
+      } catch (error) {
+        if (error.message === 'AUTH_EXPIRED') {
+          handleAuthExpired()
+          return
+        }
+        console.error('Failed to rename thread on server:', error)
+        // Could revert the title here if needed
+      }
+    }
+  }, [user, handleAuthExpired])
 
   const sendMessage = useCallback(async (content) => {
     if (!content.trim() || !activeThreadId) return
@@ -263,7 +324,7 @@ function App() {
       rating: null
     }
 
-    // Add user message and update title if first message
+    // Add user message, update title if first message, and update timestamp
     setThreads(prev => prev.map(t => {
       if (t.id === activeThreadId) {
         const isFirstMessage = t.messages.length === 0 || 
@@ -271,6 +332,7 @@ function App() {
         return {
           ...t,
           title: isFirstMessage ? content.trim().slice(0, 30) + (content.length > 30 ? '...' : '') : t.title,
+          updatedAt: new Date().toISOString(),
           messages: [...t.messages, userMessage]
         }
       }
